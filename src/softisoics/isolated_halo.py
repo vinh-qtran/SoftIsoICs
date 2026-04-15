@@ -1,10 +1,8 @@
 import numpy as np
-from scipy.integrate import cumulative_trapezoid, quad
+from scipy.integrate import cumulative_trapezoid
 from tqdm import tqdm
 
 from softisoics.constants import G
-from softisoics.ICs_writer import ICsWriter
-from softisoics.utils import get_interp
 
 
 class BaseSingleComponentProfile:
@@ -25,10 +23,14 @@ class BaseSingleComponentProfile:
             dtype=np.float64,
         )
         self.rho_bins = self._get_rho_bins(self.r_bins)
-        self.mass_bins, self.phi_bins, self.sigma_r_bins = self._get_all_profiles(self.r_bins, self.rho_bins)
+        self.mass_bins, self.phi_bins, self.sigma_r_bins = self._get_all_profiles(
+            self.r_bins, self.rho_bins
+        )
 
         self.conv_rho_bins = self._get_convoluted_rho_bins(self.r_bins, self.epsilon)
-        self.conv_mass_bins, self.conv_phi_bins, self.conv_sigma_r_bins = self._get_all_profiles(self.r_bins, self.conv_rho_bins)
+        self.conv_mass_bins, self.conv_phi_bins, self.conv_sigma_r_bins = (
+            self._get_all_profiles(self.r_bins, self.conv_rho_bins)
+        )
 
     def _get_rho_bins(self, r_bins):
         raise NotImplementedError("Not implemented in base class.")  # noqa: EM101
@@ -90,7 +92,7 @@ class BaseSingleComponentProfile:
                 _conv_rho_bins[i] = self._get_rho_bins(_r)
 
         return _conv_rho_bins
-    
+
     def _get_mass_bins(self, r_bins, rho_bins):
         _zero_mass = 4 / 3 * np.pi * r_bins[0] ** 3 * rho_bins[0]
         _mass_integrand = 4 * np.pi * r_bins**2 * rho_bins
@@ -101,7 +103,7 @@ class BaseSingleComponentProfile:
         _delta_phi_bins = cumulative_trapezoid(_delta_phi_integrand, r_bins, initial=0)
 
         return _delta_phi_bins - _delta_phi_bins[-1]
-    
+
     def _get_beta_bins(self, r_bins):
         return np.zeros_like(r_bins)
 
@@ -116,7 +118,10 @@ class BaseSingleComponentProfile:
         _delta_fbeta_rho_sigma_r_sqr_bins = cumulative_trapezoid(
             _delta_fbeta_rho_sigma_r_sqr_integrand, r_bins, initial=0
         )
-        return np.sqrt((_delta_fbeta_rho_sigma_r_sqr_bins[-1] - _delta_fbeta_rho_sigma_r_sqr_bins) / (_fbeta_bins * rho_bins))
+        return np.sqrt(
+            (_delta_fbeta_rho_sigma_r_sqr_bins[-1] - _delta_fbeta_rho_sigma_r_sqr_bins)
+            / (_fbeta_bins * rho_bins)
+        )
 
     def _get_all_profiles(self, r_bins, rho_bins):
         mass_bins = self._get_mass_bins(r_bins, rho_bins)
