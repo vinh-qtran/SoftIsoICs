@@ -22,6 +22,27 @@ class BaseSingleComponentProfile:
             Radius of the halo edge. If None, it is set to r_bin_max.
         epsilon: float, optional
             Softening length. If 0, no softening is applied.
+
+        Attributes:
+        ----------
+        r_bins: array
+            Array of the radius bins.
+        rho_bins: array
+            Array of the density bins.
+        mass_bins: array
+            Array of the mass bins.
+        phi_bins: array
+            Array of the potential bins.
+        sigma_r_bins: array
+            Array of the radial velocity dispersion bins.
+        conv_rho_bins: array
+            Array of the convoluted density bins.
+        conv_phi_bins: array
+            Array of the convoluted potential bins.
+        sigma_L_scaler: float
+            Scaler for the angular momentum dispersion sigma_L of the halo.
+        L_max: float
+            The maximum angular momentum for the halo.
         """
 
         self._r_bin_min = r_bin_min
@@ -49,11 +70,11 @@ class BaseSingleComponentProfile:
 
         self.conv_rho_bins = self._get_convoluted_rho_bins(self.r_bins, self.epsilon)
         _, self.conv_phi_bins = self._get_mass_and_phi(self.r_bins, self.conv_rho_bins)
-        self.conv_sigma_r_bins = self._get_sigma_r_bins(
-            self.r_bins, self.rho_bins, self.conv_phi_bins
-        )
 
-        self.J_max = self._get_J_max(self.r_bins, self.rho_bins, self.sigma_r_bins)
+        self.sigma_L_scaler = self._get_sigma_L_scaler(
+            self.r_bins, self.rho_bins, self.sigma_r_bins
+        )
+        self.L_max = self._get_L_max(self.r_bins, self.rho_bins, self.sigma_r_bins)
 
     def _get_rho_bins(self, r_bins):
         """
@@ -237,10 +258,42 @@ class BaseSingleComponentProfile:
             / (_fbeta_bins * rho_bins)
         )
 
-    def _get_J_max(self, r_bins, rho_bins, sigma_r_bins):
-        _J_max_integrand = np.sqrt(2 * np.pi**3) * r_bins**3 * rho_bins * sigma_r_bins
+    def _get_sigma_L_scaler(self, r_bins, rho_bins, sigma_r_bins):
+        """
+        Calculate the scaler for the angular momentum dispersion sigma_L of the halo.
+        The actual sigma_L is given by sigma_L = sqrt(m) * sigma_L_scaler.
+        """
 
-        return np.trapezoid(_J_max_integrand, r_bins)
+        _sigma_L_scaler_sqr_integrand = (
+            8 * np.pi / 3 * r_bins**4 * rho_bins * sigma_r_bins**2
+        )
+
+        return np.sqrt(np.trapezoid(_sigma_L_scaler_sqr_integrand, r_bins))
+
+    def _get_L_max(self, r_bins, rho_bins, sigma_r_bins):
+        """
+        Calculate the maximum angular momentum L_max of the halo.
+
+        Parameters:
+        ----------
+        r_bins: array
+            Array of the radius bins.
+        rho_bins: array
+            Array of the density bins.
+        sigma_r_bins: array
+            Array of the radial velocity dispersion bins.
+
+        Returns:
+        -------
+        L_max: float
+            The maximum angular momentum for the halo.
+        """
+
+        _L_max_integrand = (
+            np.sqrt(2 / np.pi) * np.pi**2 * r_bins**3 * rho_bins * sigma_r_bins
+        )
+
+        return np.trapezoid(_L_max_integrand, r_bins)
 
     def _get_mass_and_phi(self, r_bins, rho_bins):
         """
@@ -277,8 +330,32 @@ class BaseEddingtonDistribution:
             The dark matter profile.
         gas_profile: BaseSingleComponentProfile, optional
             The gas profile. If None, only the dark matter profile is used.
+
+        Attributes:
+        ----------
+        _DM_rho_bins: array
+            Array of the dark matter density bins.
+        _DM_conv_phi_bins: array
+            Array of the dark matter convoluted potential bins.
+        _gas_rho_bins: array
+            Array of the gas density bins.
+        _gas_conv_phi_bins: array
+            Array of the gas convoluted potential bins.
+        total_phi_bins: array
+            Array of the total potential bins.
+        DM_f_eps_bins: array
+            Array of the dark matter distribution function bins.
+        gas_f_eps_bins: array
+            Array of the gas distribution function bins. If gas_profile is None, this is set to
         """
-        self._read_profiles(DM_profile, gas_profile)
+
+        (
+            self._DM_rho_bins,
+            self._DM_conv_phi_bins,
+            self._gas_rho_bins,
+            self._gas_conv_phi_bins,
+            self.total_phi_bins,
+        ) = self._read_profiles(DM_profile, gas_profile)
 
         self.eps_bins, self.DM_f_eps_bins = self._get_Eddington_bins(
             self._DM_rho_bins, self.total_phi_bins
@@ -303,34 +380,42 @@ class BaseEddingtonDistribution:
         gas_profile: BaseSingleComponentProfile, optional
             The gas profile. If None, only the dark matter profile is used.
 
-        Attributes:
+        Returns:
         ----------
-        _DM_rho_bins: array
+        DM_rho_bins: array
             Array of the dark matter density bins.
-        _DM_conv_phi_bins: array
+        DM_conv_phi_bins: array
             Array of the dark matter convoluted potential bins.
-        _gas_rho_bins: array
+        gas_rho_bins: array
             Array of the gas density bins.
-        _gas_conv_phi_bins: array
+        gas_conv_phi_bins: array
             Array of the gas convoluted potential bins.
-        _phi_bins: array
+        total_phi_bins: array
             Array of the total potential bins.
         """
 
-        self._DM_rho_bins = DM_profile.rho_bins
-        self._DM_conv_phi_bins = DM_profile.conv_phi_bins
+        DM_rho_bins = DM_profile.rho_bins
+        DM_conv_phi_bins = DM_profile.conv_phi_bins
 
         if gas_profile is None:
-            self._gas_rho_bins = np.zeros_like(self._DM_rho_bins)
-            self._gas_conv_phi_bins = np.zeros_like(self._DM_conv_phi_bins)
+            gas_rho_bins = np.zeros_like(DM_rho_bins)
+            gas_conv_phi_bins = np.zeros_like(DM_conv_phi_bins)
         else:
             if not np.allclose(gas_profile.r_bins, DM_profile.r_bins):
                 raise ValueError("DM and gas profiles must have the same r_bins.")  # noqa: EM101, TRY003
 
-            self._gas_rho_bins = gas_profile.rho_bins
-            self._gas_conv_phi_bins = gas_profile.conv_phi_bins
+            gas_rho_bins = gas_profile.rho_bins
+            gas_conv_phi_bins = gas_profile.conv_phi_bins
 
-        self.total_phi_bins = self._DM_conv_phi_bins + self._gas_conv_phi_bins
+        total_phi_bins = DM_conv_phi_bins + gas_conv_phi_bins
+
+        return (
+            DM_rho_bins,
+            DM_conv_phi_bins,
+            gas_rho_bins,
+            gas_conv_phi_bins,
+            total_phi_bins,
+        )
 
     def _get_Eddington_bins(self, rho_bins, phi_bins):
         """

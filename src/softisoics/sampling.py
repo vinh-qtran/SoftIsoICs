@@ -47,6 +47,23 @@ class SampleParticles:
             Angular momentum parameter.
         seed: int
             Random seed for reproducibility.
+
+        Attributes:
+        ----------
+        part_x: array
+            Array of particle x-coordinates.
+        part_y: array
+            Array of particle y-coordinates.
+        part_z: array
+            Array of particle z-coordinates.
+        part_vx: array
+            Array of particle x-velocities.
+        part_vy: array
+            Array of particle y-velocities.
+        part_vz: array
+            Array of particle z-velocities.
+        part_mass: float
+            Mass of each particle.
         """
 
         self._r_sample_min = r_sample_min
@@ -128,7 +145,7 @@ class SampleParticles:
         Returns:
         -------
         particle_mass: float
-            Mass of the particles in M_sun.
+            Mass of the particles.
         """
         return (
             np.exp(self.log_log_mass_interp(np.log(self._r_sample_max)))
@@ -277,14 +294,14 @@ class SampleParticles:
             Array of particle y-velocities after applying angular momentum.
         """
 
-        _L_z = part_x * part_vy - part_y * part_vx
+        _J_z = part_x * part_vy - part_y * part_vx
 
-        _retrograde_mask = _L_z < 0
+        _retrograde_mask = _J_z < 0
         _flip_mask = (
             np.random.uniform(0, 1, self._N_part).astype(np.float64) < self._kappa_L  # noqa: NPY002
         )
 
-        _L_z_scaler = np.ones(self._N_part, dtype=np.float64)
-        _L_z_scaler[np.logical_and(_retrograde_mask, _flip_mask)] = -1
+        _L_z_modifier = np.ones(self._N_part, dtype=np.float64)
+        _L_z_modifier[np.logical_and(_retrograde_mask, _flip_mask)] = -1
 
-        return part_vx * _L_z_scaler, part_vy * _L_z_scaler
+        return part_vx * _L_z_modifier, part_vy * _L_z_modifier

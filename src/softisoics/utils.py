@@ -85,12 +85,23 @@ class Halo:
             Array of particle velocities.
         part_mass: float
             Mass of each particle.
+
+        Attributes:
+        ----------
+        part_coords: array
+            Array of particle coordinates.
+        part_velocs: array
+            Array of particle velocities.
+        part_mass: float
+            Mass of each particle.
         """
 
         self.part_coords = part_coords
         self.part_velocs = part_velocs
 
         self.part_mass = part_mass
+
+        self._center_halo()
 
     def input_from_file(self, data_file):
         """
@@ -100,6 +111,15 @@ class Halo:
         ----------
         data_file: str
             Path to the input file.
+
+        Attributes:
+        ----------
+        part_coords: array
+            Array of particle coordinates.
+        part_velocs: array
+            Array of particle velocities.
+        part_mass: float
+            Mass of each particle.
         """
 
         data = h5py.File(data_file, "r")
@@ -109,26 +129,85 @@ class Halo:
 
         self.part_mass = data["PartType1/Masses"][0]
 
+        self._center_halo()
+
     def _center_halo(self):
         """
         Center the halo and calculate the radii and radial velocities of the particles.
+
+        Attributes:
+        ----------
+        halo_center: array
+            Array of the halo center coordinates.
+        part_coords: array
+            Array of particle coordinates centered on the halo.
+        part_radii: array
+            Array of particle radii from the halo center.
+        part_radial_velocs: array
+            Array of particle radial velocities from the halo center.
         """
 
-        _halo_center = np.mean(self.part_coords, axis=0)
+        self.halo_center = np.mean(self.part_coords, axis=0)
 
-        self.part_coords -= _halo_center
+        self.part_coords -= self.halo_center
         self.part_radii = np.sqrt(np.sum(self.part_coords**2, axis=1))
 
         self.part_radial_velocs = (
             np.sum(self.part_coords * self.part_velocs, axis=1) / self.part_radii
         )
 
+    def get_angular_momenta(self):
+        """
+        Get the angular momenta of the particles in the halo.
+
+        Returns:
+        -------
+        Lx: array
+            Array of particle angular momenta in the x-direction.
+        Ly: array
+            Array of particle angular momenta in the y-direction.
+        Lz: array
+            Array of particle angular momenta in the z-direction.
+        """
+
+        Lx = self.part_mass * np.sum(
+            self.part_coords[:, 1] * self.part_velocs[:, 2]
+            - self.part_coords[:, 2] * self.part_velocs[:, 1]
+        )
+        Ly = self.part_mass * np.sum(
+            self.part_coords[:, 2] * self.part_velocs[:, 0]
+            - self.part_coords[:, 0] * self.part_velocs[:, 2]
+        )
+        Lz = self.part_mass * np.sum(
+            self.part_coords[:, 0] * self.part_velocs[:, 1]
+            - self.part_coords[:, 1] * self.part_velocs[:, 0]
+        )
+
+        return Lx, Ly, Lz
+
     def get_profiles(self, r_bin_edges=None):
         """
         Get the density and radial velocity dispersion profiles of the halo.
-        """
 
-        self._center_halo()
+        Parameters:
+        ----------
+        r_bin_edges: array
+            Array of the radius bin edges. If None, default to 50 logarithmically spaced
+            bins between 10^-3 and 10^2.
+
+        Returns:
+        -------
+        r_bins: array
+            Array of the radius bins.
+        rho_bins: array
+            Array of the density bins.
+        rho_bins_err: array
+            Array of the density bin errors.
+        sigma_r_bins: array
+            Array of the radial velocity dispersion bins.
+        sigma_r_bins_err: array
+            Array of the radial velocity dispersion bin errors.
+        """
 
         _r_bin_edges = (
             r_bin_edges if r_bin_edges is not None else np.logspace(-3, 2, 51)
