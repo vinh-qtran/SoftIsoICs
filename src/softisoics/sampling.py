@@ -11,12 +11,13 @@ class SampleParticles:
         r_bins,
         rho_bins,
         mass_bins,
-        phi_bins,
+        total_phi_bins,
         eps_bins,
         f_eps_bins,
         r_sample_min,
         r_sample_max,
         N_part,
+        kappa_L=0.0,
         seed=42,
     ):
         """
@@ -30,7 +31,7 @@ class SampleParticles:
             Array of the density bins.
         mass_bins: array
             Array of the mass bins.
-        phi_bins: array
+        total_phi_bins: array
             Array of the total potential bins.
         eps_bins: array
             Array of the eps bins.
@@ -42,6 +43,8 @@ class SampleParticles:
             Maximum radius to sample particles from.
         N_part: int
             Number of particles to sample from the halo.
+        kappa_L: float
+            Angular momentum parameter.
         seed: int
             Random seed for reproducibility.
         """
@@ -69,8 +72,15 @@ class SampleParticles:
         )
 
         self.part_vx, self.part_vy, self.part_vz = self._sample_particle_velocities(
-            _part_r, r_bins, rho_bins, phi_bins
+            _part_r, r_bins, rho_bins, total_phi_bins
         )
+
+        self._kappa_L = kappa_L
+
+        if kappa_L > 0:
+            self.part_vx, self.part_vy = self._apply_angular_momentum(
+                self.part_vx, self.part_vy, self.part_x, self.part_y
+            )
 
     def _check_sampling_range(self, r_bins):
         """
@@ -165,7 +175,7 @@ class SampleParticles:
             part_r * np.sin(_part_theta),
         )
 
-    def _sample_particle_velocities(self, part_r, r_bins, rho_bins, phi_bins):
+    def _sample_particle_velocities(self, part_r, r_bins, rho_bins, total_phi_bins):
         """
         Sample the velocities of the particles in the halo using inversion sampling.
 
@@ -177,22 +187,22 @@ class SampleParticles:
             Array of the radius bins.
         rho_bins: array
             Array of the density bins.
-        phi_bins: array
+        total_phi_bins: array
             Array of the total potential bins.
 
         Returns:
         -------
         part_vx: array
-            Array of particle x-velocities in km/s.
+            Array of particle x-velocities.
         part_vy: array
-            Array of particle y-velocities in km/s.
+            Array of particle y-velocities.
         part_vz: array
-            Array of particle z-velocities in km/s.
+            Array of particle z-velocities.
         """
 
         _interp_rho_bins = np.exp((np.log(rho_bins[:-1]) + np.log(rho_bins[1:])) / 2)
-        _interp_psi_bins = -(phi_bins[:-1] + phi_bins[1:]) / 2
-        _interp_vmax_bins = np.sqrt(2 * _interp_psi_bins)
+        _interp_total_psi_bins = -(total_phi_bins[:-1] + total_phi_bins[1:]) / 2
+        _interp_vmax_bins = np.sqrt(2 * _interp_total_psi_bins)
 
         _bin_indices = np.digitize(part_r, r_bins) - 1
 
@@ -213,18 +223,15 @@ class SampleParticles:
                 * np.pi
                 * _v_bins**2
                 * np.exp(
-                    self.lin_log_eddington_interp(_interp_psi_bins[i] - _v_bins**2 / 2)
+                    self.lin_log_eddington_interp(
+                        _interp_total_psi_bins[i] - _v_bins**2 / 2
+                    )
                 )
                 / _interp_rho_bins[i]
             )
 
             _P_v_bins = cumulative_trapezoid(_p_v_bins, _v_bins, initial=0)
             _P_v_mask = np.logical_and(np.isfinite(_P_v_bins), _P_v_bins <= 1)
-
-            # from matplotlib import pyplot as plt
-            # plt.plot(_v_bins, _p_v_bins)
-            # plt.show()
-            # plt.close()
 
             _lin_lin_inverse_P_v_interp = get_interp(
                 _P_v_bins[_P_v_mask] / _P_v_bins[_P_v_mask][-1], _v_bins[_P_v_mask]
@@ -246,3 +253,38 @@ class SampleParticles:
             _part_v * np.cos(part_v_theta) * np.sin(part_v_phi),
             _part_v * np.sin(part_v_theta),
         )
+
+    def _apply_angular_momentum(self, part_vx, part_vy, part_x, part_y):
+        """
+        Apply the angular momentum to halo via flipping the velocities of a fraction of the retrograde particles.
+
+        Parameters:
+        ----------
+        part_vx: array
+            Array of particle x-velocities.
+        part_vy: array
+            Array of particle y-velocities.
+        part_x: array
+            Array of particle x-coordinates.
+        part_y: array
+            Array of particle y-coordinates.
+
+        Returns:
+        -------
+        part_vx: array
+            Array of particle x-velocities after applying angular momentum.
+        part_vy: array
+            Array of particle y-velocities after applying angular momentum.
+        """
+
+        _L_z = part_x * part_vy - part_y * part_vx
+
+        _retrograde_mask = _L_z < 0
+        _flip_mask = (
+            np.random.uniform(0, 1, self._N_part).astype(np.float64) < self._kappa_L  # noqa: NPY002
+        )
+
+        _L_z_scaler = np.ones(self._N_part, dtype=np.float64)
+        _L_z_scaler[np.logical_and(_retrograde_mask, _flip_mask)] = -1
+
+        return part_vx * _L_z_scaler, part_vy * _L_z_scaler

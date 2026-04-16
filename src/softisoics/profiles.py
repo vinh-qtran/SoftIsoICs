@@ -53,6 +53,8 @@ class BaseSingleComponentProfile:
             self.r_bins, self.rho_bins, self.conv_phi_bins
         )
 
+        self.J_max = self._get_J_max(self.r_bins, self.rho_bins, self.sigma_r_bins)
+
     def _get_rho_bins(self, r_bins):
         """
         Get the density profile. Must be implemented in the subclass.
@@ -235,6 +237,11 @@ class BaseSingleComponentProfile:
             / (_fbeta_bins * rho_bins)
         )
 
+    def _get_J_max(self, r_bins, rho_bins, sigma_r_bins):
+        _J_max_integrand = np.sqrt(2 * np.pi**3) * r_bins**3 * rho_bins * sigma_r_bins
+
+        return np.trapezoid(_J_max_integrand, r_bins)
+
     def _get_mass_and_phi(self, r_bins, rho_bins):
         """
         Get the mass and potential profiles from the density profile.
@@ -274,12 +281,12 @@ class BaseEddingtonDistribution:
         self._read_profiles(DM_profile, gas_profile)
 
         self.eps_bins, self.DM_f_eps_bins = self._get_Eddington_bins(
-            self._DM_rho_bins, self.phi_bins
+            self._DM_rho_bins, self.total_phi_bins
         )
 
         if gas_profile is not None:
             _, self.gas_f_eps_bins = self._get_Eddington_bins(
-                self._gas_rho_bins, self.phi_bins
+                self._gas_rho_bins, self.total_phi_bins
             )
         else:
             self.gas_f_eps_bins = np.zeros_like(self.DM_f_eps_bins)
@@ -323,7 +330,7 @@ class BaseEddingtonDistribution:
             self._gas_rho_bins = gas_profile.rho_bins
             self._gas_conv_phi_bins = gas_profile.conv_phi_bins
 
-        self.phi_bins = self._DM_conv_phi_bins + self._gas_conv_phi_bins
+        self.total_phi_bins = self._DM_conv_phi_bins + self._gas_conv_phi_bins
 
     def _get_Eddington_bins(self, rho_bins, phi_bins):
         """
@@ -378,15 +385,15 @@ class BaseEddingtonDistribution:
 
         return _eps_bins, 1 / np.sqrt(8) / np.pi**2 * np.array(_f_eps_bins)
 
-    def reconstruct_density(self, conv_phi_bins, eps_bins, f_eps_bins):
+    def reconstruct_density(self, total_phi_bins, eps_bins, f_eps_bins):
         """
         Reconstruct the density profile from the Eddington distribution function to check
         for self-consistency. The reconstructed density should match the original density profile.
 
         Parameters:
         ----------
-        conv_phi_bins: array
-            Array of the convoluted potential bins.
+        total_phi_bins: array
+            Array of the total potential bins.
         eps_bins: array
             Array of the eps bins, where eps = -phi.
         f_eps_bins: array
@@ -404,7 +411,7 @@ class BaseEddingtonDistribution:
             return 4 * np.pi * v**2 * np.exp(_lin_log_eddington_interp(psi - v**2 / 2))
 
         _reconstructed_rho_bins = []
-        for phi in tqdm(conv_phi_bins, desc="Reconstructing densities"):
+        for phi in tqdm(total_phi_bins, desc="Reconstructing densities"):
             _reconstructed_rho_bins.append(  # noqa: PERF401
                 quad(_rho_integrand, 0, np.sqrt(-2 * phi), args=(-phi,))[0]
             )

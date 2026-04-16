@@ -31,13 +31,13 @@ def get_interp(x_bins, y_bins):
     return CubicSpline(x_bins[finite_mask], y_bins[finite_mask])
 
 
-def get_N_part_from_N_200(N200, r200, r_sample_max, r_bins, mass_bins):
+def get_N_part_from_N_200(N_200, r200, r_sample_max, r_bins, mass_bins):
     """
     Get the number of particles to sample from the halo given the number of particles within r200.
 
     Parameters:
     ----------
-    N200: int
+    N_200: int
         Number of particles within r200.
     r200: float
         Virial radius of the halo.
@@ -65,7 +65,7 @@ def get_N_part_from_N_200(N200, r200, r_sample_max, r_bins, mass_bins):
     _M_200 = np.exp(_log_log_mass_interp(np.log(r200)))
     _M_sample = np.exp(_log_log_mass_interp(np.log(r_sample_max)))
 
-    return int(N200 * _M_sample / _M_200)
+    return int(N_200 * _M_sample / _M_200)
 
 
 class Halo:
