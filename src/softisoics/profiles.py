@@ -5,7 +5,7 @@ from tqdm import tqdm
 from softisoics.utils import get_interp
 
 
-class BaseSingleComponentProfile:
+class BaseSingleProfile:
     def __init__(self, r_bin_min, r_bin_max, N_bins, halo_edge=None, epsilon=0):
         """
         Initialize the profile.
@@ -193,147 +193,88 @@ class BaseSingleComponentProfile:
         return _delta_phi_bins - _delta_phi_bins[-1]
 
 
-class BaseEddingtonDistribution:
-    def __init__(self, DM_profile, gas_profile=None):
+class CollisionlessSingleProfile(BaseSingleProfile):
+    def __init__(self, r_bin_min, r_bin_max, N_bins, halo_edge=None, epsilon=0):
+        super().__init__(
+            r_bin_min=r_bin_min,
+            r_bin_max=r_bin_max,
+            N_bins=N_bins,
+            halo_edge=halo_edge,
+            epsilon=epsilon,
+        )
+
         """
-        Initialize the Eddington distribution.
+        Initialize the profile.
 
         Parameters:
         ----------
-        DM_profile: BaseSingleComponentProfile
-            The dark matter profile.
-        gas_profile: BaseSingleComponentProfile, optional
-            The gas profile. If None, only the dark matter profile is used.
+        r_bin_min: float
+            Minimum radius of the profile.
+        r_bin_max: float
+            Maximum radius of the profile.
+        N_bins: int
+            Number of bins for the profile.
+        halo_edge: float, optional
+            Radius of the halo edge. If None, it is set to r_bin_max.
+        epsilon: float, optional
+            Softening length. If 0, no softening is applied.
 
         Attributes:
         ----------
-        DM_sigma_r_bins: array
-            Array of the dark matter radial velocity dispersion bins.
-        DM_L_err_scaler: float
-            Scaler for the dark matter angular momentum dispersion of the halo.
-        DM_L_max: float
-            The maximum angular momentum for the dark matter halo.
-        gas_sigma_r_bins: array
-            Array of the gas radial velocity dispersion bins.
-        gas_L_err_scaler: float
-            Scaler for the gas angular momentum dispersion of the halo.
-        gas_L_max: float
-            The maximum angular momentum for the gas halo.
-        total_phi_bins: array
-            Array of the total potential bins.
-        DM_f_eps_bins: array
-            Array of the dark matter distribution function bins.
-        gas_f_eps_bins: array
-            Array of the gas distribution function bins. If gas_profile is None, this is set to
+        r_bins: array
+            Array of the radius bins.
+        rho_bins: array
+            Array of the density bins.
+        mass_bins: array
+            Array of the mass bins.
+        phi_bins: array
+            Array of the potential bins.
+        conv_phi_bins: array
+            Array of the convoluted potential bins.
         """
 
-        (
-            self._DM_rho_bins,
-            self._DM_conv_phi_bins,
-            self.DM_sigma_r_bins,
-            self.DM_L_err_scaler,
-            self.DM_L_max,
-            self._gas_rho_bins,
-            self._gas_conv_phi_bins,
-            self.gas_sigma_r_bins,
-            self.gas_L_err_scaler,
-            self.gas_L_max,
-            self.total_phi_bins,
-        ) = self._read_profiles(DM_profile, gas_profile)
-
-        self.eps_bins, self.DM_f_eps_bins = self._get_Eddington_bins(
-            self._DM_rho_bins, self.total_phi_bins
-        )
-
-        if gas_profile is not None:
-            _, self.gas_f_eps_bins = self._get_Eddington_bins(
-                self._gas_rho_bins, self.total_phi_bins
-            )
-        else:
-            self.gas_f_eps_bins = np.zeros_like(self.DM_f_eps_bins)
-
-    def _read_profiles(self, DM_profile, gas_profile):
+    def get_potential_dependent_profiles(self, total_phi_bins):
         """
-        Read the profiles from the input DM and gas profiles. The DM and gas profiles must have the same r_bins.
-        If gas_profile is None, the gas density and potential are set to zero. The total potential is the sum of the DM and gas potentials.
+        Get all potential-dependent profiles.
 
         Parameters:
         ----------
-        DM_profile: BaseSingleComponentProfile
-            The dark matter profile.
-        gas_profile: BaseSingleComponentProfile, optional
-            The gas profile. If None, only the dark matter profile is used.
-
-        Returns:
-        ----------
-        DM_rho_bins: array
-            Array of the dark matter density bins.
-        DM_conv_phi_bins: array
-            Array of the dark matter convoluted potential bins.
-        DM_sigma_r_bins: array
-            Array of the dark matter radial velocity dispersion bins.
-        DM_L_err_scaler: float
-            Scaler for the dark matter angular momentum dispersion of the halo.
-        DM_L_max: float
-            The maximum angular momentum for the dark matter halo.
-        gas_rho_bins: array
-            Array of the gas density bins.
-        gas_conv_phi_bins: array
-            Array of the gas convoluted potential bins.
-        gas_sigma_r_bins: array
-            Array of the gas radial velocity dispersion bins.
-        gas_L_err_scaler: float
-            Scaler for the gas angular momentum dispersion of the halo.
-        gas_L_max: float
-            The maximum angular momentum for the gas halo.
         total_phi_bins: array
             Array of the total potential bins.
+
+        Attributes:
+        -------
+        total_phi_bins: array
+            Array of the total potential bins.
+        sigma_r_bins: array
+            Array of the radial velocity dispersion bins.
+        L_err_scaler: float
+            Scaler for the angular momentum dispersion of the halo.
+        L_max: float
+            The maximum angular momentum for the halo.
+        eps_bins: array
+            Array of the eps bins, where eps = -total_phi.
+        f_eps_bins: array
+            Array of the distribution function bins.
         """
+        self.total_phi_bins = total_phi_bins
 
-        _r_bins = DM_profile.r_bins
-
-        DM_rho_bins = DM_profile.rho_bins
-        DM_conv_phi_bins = DM_profile.conv_phi_bins
-
-        if gas_profile is None:
-            gas_rho_bins = np.zeros_like(_r_bins)
-            gas_conv_phi_bins = np.zeros_like(_r_bins)
-        else:
-            if not np.allclose(gas_profile.r_bins, _r_bins):
-                raise ValueError("DM and gas profiles must have the same r_bins.")  # noqa: EM101, TRY003
-
-            gas_rho_bins = gas_profile.rho_bins
-            gas_conv_phi_bins = gas_profile.conv_phi_bins
-
-        total_phi_bins = DM_conv_phi_bins + gas_conv_phi_bins
-
-        _DM_beta_bins = self._get_DM_beta_bins(_r_bins)
-        DM_sigma_r_bins, DM_L_err_scaler, DM_L_max = self._get_sigma_r_related(
-            _r_bins, DM_rho_bins, total_phi_bins, _DM_beta_bins
+        self.sigma_r_bins = self.get_sigma_r_bins(
+            self.r_bins, self.rho_bins, total_phi_bins
         )
 
-        _gas_beta_bins = self._get_gas_beta_bins(_r_bins)
-        gas_sigma_r_bins, gas_L_err_scaler, gas_L_max = self._get_sigma_r_related(
-            _r_bins, gas_rho_bins, total_phi_bins, _gas_beta_bins
+        self.L_err_scaler = self.get_L_err_scaler(
+            self.r_bins, self.rho_bins, self.sigma_r_bins
+        )
+        self.L_max = self.get_L_max(self.r_bins, self.rho_bins, self.sigma_r_bins)
+
+        self.eps_bins, self.f_eps_bins = self.get_Eddington_bins(
+            self.rho_bins, total_phi_bins
         )
 
-        return (
-            DM_rho_bins,
-            DM_conv_phi_bins,
-            DM_sigma_r_bins,
-            DM_L_err_scaler,
-            DM_L_max,
-            gas_rho_bins,
-            gas_conv_phi_bins,
-            gas_sigma_r_bins,
-            gas_L_err_scaler,
-            gas_L_max,
-            total_phi_bins,
-        )
-
-    def _get_DM_beta_bins(self, r_bins):
+    def _get_beta_bins(self, r_bins):
         """
-        Get the velocity anisotropy profile for DM. The default is isotropic, i.e., beta=0.
+        Get the velocity anisotropy profile. The default is isotropic, i.e., beta=0.
         Anisotropic profiles can be implemented in the subclass by overriding this method.
 
         Parameters:
@@ -348,24 +289,7 @@ class BaseEddingtonDistribution:
         """
         return np.zeros_like(r_bins)
 
-    def _get_gas_beta_bins(self, r_bins):
-        """
-        Get the velocity anisotropy profile for gas. The default is isotropic, i.e., beta=0.
-        Anisotropic profiles can be implemented in the subclass by overriding this method.
-
-        Parameters:
-        ----------
-        r_bins: array
-            Array of the radius bins.
-
-        Returns:
-        -------
-        beta_bins: array
-            Array of the velocity anisotropy bins.
-        """
-        return np.zeros_like(r_bins)
-
-    def _get_sigma_r_bins(self, r_bins, rho_bins, phi_bins, beta_bins):
+    def get_sigma_r_bins(self, r_bins, rho_bins, total_phi_bins):
         """
         Get the radial velocity dispersion profile.
 
@@ -375,8 +299,8 @@ class BaseEddingtonDistribution:
             Array of the radius bins.
         rho_bins: array
             Array of the density bins.
-        phi_bins: array
-            Array of the potential bins.
+        total_phi_bins: array
+            Array of the total potential bins.
 
         Returns:
         -------
@@ -384,11 +308,15 @@ class BaseEddingtonDistribution:
             Array of the radial velocity dispersion bins.
         """
 
-        _ln_fbeta_bins = 2 * beta_bins / r_bins
+        _beta_bins = self._get_beta_bins(r_bins)
+        _ln_fbeta_bins = 2 * _beta_bins / r_bins
         _fbeta_bins = np.exp(cumulative_trapezoid(_ln_fbeta_bins, r_bins, initial=0))
 
         _delta_fbeta_rho_sigma_r_sqr_integrand = (
-            _fbeta_bins * rho_bins * np.gradient(phi_bins, np.log(r_bins)) / r_bins
+            _fbeta_bins
+            * rho_bins
+            * np.gradient(total_phi_bins, np.log(r_bins))
+            / r_bins
         )
         _delta_fbeta_rho_sigma_r_sqr_bins = cumulative_trapezoid(
             _delta_fbeta_rho_sigma_r_sqr_integrand, r_bins, initial=0
@@ -398,7 +326,7 @@ class BaseEddingtonDistribution:
             / (_fbeta_bins * rho_bins)
         )
 
-    def _get_L_err_scaler(self, r_bins, rho_bins, sigma_r_bins):
+    def get_L_err_scaler(self, r_bins, rho_bins, sigma_r_bins):
         """
         Calculate the scaler for the angular momentum dispersion of the halo.
         The actual angular momentum dispersion is given by L_err = sqrt(m) * L_err_scaler.
@@ -410,7 +338,7 @@ class BaseEddingtonDistribution:
 
         return np.sqrt(np.trapezoid(_L_err_scaler_sqr_integrand, r_bins))
 
-    def _get_L_max(self, r_bins, rho_bins, sigma_r_bins):
+    def get_L_max(self, r_bins, rho_bins, sigma_r_bins):
         """
         Calculate the maximum angular momentum of the halo.
 
@@ -435,43 +363,7 @@ class BaseEddingtonDistribution:
 
         return np.trapezoid(_L_max_integrand, r_bins)
 
-    def _get_sigma_r_related(self, r_bins, rho_bins, total_phi_bins, beta_bins):
-        """
-        Get the radial velocity dispersion related profiles and params.
-
-        Parameters:
-        ----------
-        r_bins: array
-            Array of the radius bins.
-        rho_bins: array
-            Array of the density bins.
-        total_phi_bins: array
-            Array of the total potential bins.
-        beta_bins: array
-            Array of the velocity anisotropy bins.
-
-        Returns:
-        -------
-        sigma_r_bins: array
-            Array of the radial velocity dispersion bins.
-        L_err_scaler: float
-            Scaler for the angular momentum dispersion of the halo.
-        L_max: float
-            The maximum angular momentum for the halo.
-        """
-        if np.isclose(rho_bins, 0).all():
-            return np.zeros_like(r_bins), 0, 0
-
-        sigma_r_bins = self._get_sigma_r_bins(
-            r_bins, rho_bins, total_phi_bins, beta_bins
-        )
-
-        L_err_scaler = self._get_L_err_scaler(r_bins, rho_bins, sigma_r_bins)
-        L_max = self._get_L_max(r_bins, rho_bins, sigma_r_bins)
-
-        return sigma_r_bins, L_err_scaler, L_max
-
-    def _get_Eddington_bins(self, rho_bins, phi_bins):
+    def get_Eddington_bins(self, rho_bins, total_phi_bins):
         """
         Perform Eddington's inversion to get the distribution function bins.
 
@@ -479,23 +371,25 @@ class BaseEddingtonDistribution:
         ----------
         rho_bins: array
             Array of the density bins.
-        phi_bins: array
-            Array of the potential bins.
+        total_phi_bins: array
+            Array of the total potential bins.
 
         Returns:
         -------
         eps_bins: array
-            Array of the eps bins, where eps = -phi.
+            Array of the eps bins, where eps = -total_phi.
         f_eps_bins: array
             Array of the distribution function bins.
         """
 
-        _psi_bins = np.flip(-phi_bins)
+        _psi_bins = np.flip(-total_phi_bins)
         _d2rho_dpsi2_bins = np.flip(
             rho_bins
             * (
-                np.gradient(np.log(rho_bins), phi_bins) ** 2
-                + np.gradient(np.gradient(np.log(rho_bins), phi_bins), phi_bins)
+                np.gradient(np.log(rho_bins), total_phi_bins) ** 2
+                + np.gradient(
+                    np.gradient(np.log(rho_bins), total_phi_bins), total_phi_bins
+                )
             )
         )
 
@@ -505,7 +399,7 @@ class BaseEddingtonDistribution:
 
         _eps_bins = _psi_bins
         _f_eps_bins = [0]
-        for i in tqdm(range(1, len(phi_bins)), desc="Eddington's inversion"):
+        for i in tqdm(range(1, len(total_phi_bins)), desc="Eddington's inversion"):
 
             def _f_eps_integrand(psi):
                 return (
@@ -534,7 +428,7 @@ class BaseEddingtonDistribution:
         total_phi_bins: array
             Array of the total potential bins.
         eps_bins: array
-            Array of the eps bins, where eps = -phi.
+            Array of the eps bins, where eps = -total_phi.
         f_eps_bins: array
             Array of the distribution function bins.
 
