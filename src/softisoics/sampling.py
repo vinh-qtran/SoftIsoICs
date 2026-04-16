@@ -119,23 +119,23 @@ class SampleParticles:
 
         Returns:
         -------
-        _log_log_mass_interp: CubicSpline
+        log_log_mass_interp: CubicSpline
             Interpolated mass profile of the halo in log-log x-y space.
-        _log_log_inverse_mass_interp: CubicSpline
+        log_log_inverse_mass_interp: CubicSpline
             Inverse interpolated mass profile of the halo in log-log x-y space.
-        _lin_log_eddington_interp: CubicSpline
+        lin_log_eddington_interp: CubicSpline
             Interpolated Eddington distribution of the halo in linear-log x-y space.
         """
 
-        _log_log_mass_interp = get_interp(np.log(r_bins), np.log(mass_bins))
-        _log_log_inverse_mass_interp = get_interp(np.log(mass_bins), np.log(r_bins))
+        log_log_mass_interp = get_interp(np.log(r_bins), np.log(mass_bins))
+        log_log_inverse_mass_interp = get_interp(np.log(mass_bins), np.log(r_bins))
 
-        _lin_log_eddington_interp = get_interp(eps_bins, np.log(f_eps_bins))
+        lin_log_eddington_interp = get_interp(eps_bins, np.log(f_eps_bins))
 
         return (
-            _log_log_mass_interp,
-            _log_log_inverse_mass_interp,
-            _lin_log_eddington_interp,
+            log_log_mass_interp,
+            log_log_inverse_mass_interp,
+            lin_log_eddington_interp,
         )
 
     def _get_particle_mass(self):
