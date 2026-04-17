@@ -84,20 +84,21 @@ class SampleParticles:
 
         self.part_mass = self._get_particle_mass()
 
-        _part_r, self.part_x, self.part_y, self.part_z = (
-            self._sample_particle_positions()
-        )
+        _part_r, _part_x, _part_y, _part_z = self._sample_particle_positions()
 
-        self.part_vx, self.part_vy, self.part_vz = self._sample_particle_velocities(
+        _part_vx, _part_vy, _part_vz = self._sample_particle_velocities(
             _part_r, r_bins, rho_bins, total_phi_bins
         )
 
         self._kappa_L = kappa_L
 
         if kappa_L > 0:
-            self.part_vx, self.part_vy = self._apply_angular_momentum(
-                self.part_vx, self.part_vy, self.part_x, self.part_y
+            _part_vx, _part_vy = self._apply_angular_momentum(
+                _part_vx, _part_vy, _part_x, _part_y
             )
+
+        self.part_coords = np.vstack([_part_x, _part_y, _part_z]).T
+        self.part_velocs = np.vstack([_part_vx, _part_vy, _part_vz]).T
 
     def _check_sampling_range(self, r_bins):
         """

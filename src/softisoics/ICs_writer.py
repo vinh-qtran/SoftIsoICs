@@ -3,30 +3,25 @@ import numpy as np
 
 
 class ICsWriter:
-    def __init__(self, part_coords, part_velocs, part_ids, part_masses):
-        self.part_coords = part_coords
-        self.part_velocs = part_velocs
-        self.part_ids = part_ids
-        self.part_masses = part_masses
+    def __init__(self, dm_info=None, gas_info=None, star_info=None):
+        self.dm_info = dm_info
+        self.gas_info = gas_info
+        self.star_info = star_info
 
-        self.N_parts = self._get_N_parts()
+        self._NumPart = np.zeros(6, dtype=np.int32)
 
-    def _get_N_parts(self):
-        N_parts = self.part_coords.shape[0]
-
-        for _arr in [self.part_velocs, self.part_ids, self.part_masses]:
-            if _arr.shape[0] != N_parts:
-                raise ValueError("All particle arrays must have the same length.")  # noqa: EM101, TRY003
-
-        return N_parts
+        if self.dm_info is not None:
+            self._NumPart[1] = self.dm_info["part_coords"].shape[0]
+        if self.gas_info is not None:
+            self._NumPart[0] = self.gas_info["cell_coords"].shape[0]
+        if self.star_info is not None:
+            self._NumPart[4] = self.star_info["part_coords"].shape[0]
 
     def _write_header(self, ICs):
         _header = ICs.create_group("Header")
 
-        _NumPart = np.array([0, self.N_parts, 0, 0, 0, 0], dtype=np.int32)
-
-        _header.attrs.create("NumPart_ThisFile", _NumPart)
-        _header.attrs.create("NumPart_Total", _NumPart)
+        _header.attrs.create("NumPart_ThisFile", self._NumPart)
+        _header.attrs.create("NumPart_Total", self._NumPart)
         _header.attrs.create("NumPart_Total_HighWord", np.zeros(6, dtype=np.int32))
         _header.attrs.create("MassTable", np.zeros(6, dtype=np.float64))
 
@@ -48,15 +43,37 @@ class ICsWriter:
 
         _header.attrs.create("Flag_DoublePrecision", 1)
 
-    def _write_particles(self, ICs):
+    def _write_dm(self, ICs, dm_info):
         _part1 = ICs.create_group("PartType1")
 
-        _part1.create_dataset("ParticleIDs", data=self.part_ids)
-        _part1.create_dataset("Coordinates", data=self.part_coords)
-        _part1.create_dataset("Masses", data=self.part_masses)
-        _part1.create_dataset("Velocities", data=self.part_velocs)
+        _part1.create_dataset("ParticleIDs", data=dm_info["part_ids"])
+        _part1.create_dataset("Coordinates", data=dm_info["part_coords"])
+        _part1.create_dataset("Masses", data=dm_info["part_masses"])
+        _part1.create_dataset("Velocities", data=dm_info["part_velocs"])
+
+    def _write_gas(self, ICs, gas_info):
+        _part0 = ICs.create_group("PartType0")
+
+        _part0.create_dataset("ParticleIDs", data=gas_info["cell_ids"])
+        _part0.create_dataset("Coordinates", data=gas_info["cell_coords"])
+        _part0.create_dataset("Masses", data=gas_info["cell_masses"])
+        _part0.create_dataset("Velocities", data=gas_info["cell_velocs"])
+        _part0.create_dataset("InternalEnergy", data=gas_info["cell_internal_energies"])
+
+    def _write_star(self, ICs, star_info):
+        _part4 = ICs.create_group("PartType4")
+
+        _part4.create_dataset("ParticleIDs", data=star_info["part_ids"])
+        _part4.create_dataset("Coordinates", data=star_info["part_coords"])
+        _part4.create_dataset("Masses", data=star_info["part_masses"])
+        _part4.create_dataset("Velocities", data=star_info["part_velocs"])
 
     def write(self, filename):
         with h5py.File(filename, "w") as ICs:
             self._write_header(ICs)
-            self._write_particles(ICs)
+            if self.dm_info is not None:
+                self._write_dm(ICs, self.dm_info)
+            if self.gas_info is not None:
+                self._write_gas(ICs, self.gas_info)
+            if self.star_info is not None:
+                self._write_star(ICs, self.star_info)

@@ -450,3 +450,122 @@ class CollisionlessSingleProfile(BaseSingleProfile):
             )
 
         return np.array(_reconstructed_rho_bins)
+
+
+class CollisionalSingleProfile(BaseSingleProfile):
+    def __init__(self, r_bin_min, r_bin_max, N_bins, halo_edge=None, epsilon=0):
+        super().__init__(
+            r_bin_min=r_bin_min,
+            r_bin_max=r_bin_max,
+            N_bins=N_bins,
+            halo_edge=halo_edge,
+            epsilon=epsilon,
+        )
+
+        """
+        Initialize the profile.
+
+        Parameters:
+        ----------
+        r_bin_min: float
+            Minimum radius of the profile.
+        r_bin_max: float
+            Maximum radius of the profile.
+        N_bins: int
+            Number of bins for the profile.
+        halo_edge: float, optional
+            Radius of the halo edge. If None, it is set to r_bin_max.
+        epsilon: float, optional
+            Softening length. If 0, no softening is applied.
+
+        Attributes:
+        ----------
+        r_bins: array
+            Array of the radius bins.
+        rho_bins: array
+            Array of the density bins.
+        mass_bins: array
+            Array of the mass bins.
+        phi_bins: array
+            Array of the potential bins.
+        conv_phi_bins: array
+            Array of the convoluted potential bins.
+        """
+
+    def get_potential_dependent_profiles(self, total_phi_bins, gamma=5 / 3):
+        """
+        Get all potential-dependent profiles.
+
+        Parameters:
+        ----------
+        total_phi_bins: array
+            Array of the total potential bins.
+        gamma: float
+            Adiabatic index for the gas.
+
+        Attributes:
+        -------
+        total_phi_bins: array
+            Array of the total potential bins.
+        gamma: float
+            Adiabatic index for the gas.
+        pressure_bins: array
+            Array of the pressure bins.
+        internal_energy_bins: array
+            Array of the internal energy bins.
+        """
+        self.total_phi_bins = total_phi_bins
+        self.gamma = gamma
+
+        self.pressure_bins = self._get_pressure_bins(
+            self.r_bins, self.rho_bins, total_phi_bins
+        )
+
+        self.internal_energy_bins = self._get_internal_energy_bins(
+            self.rho_bins, self.pressure_bins, gamma
+        )
+
+    def _get_pressure_bins(self, r_bins, rho_bins, total_phi_bins):
+        """
+        Get the pressure profile via the hydrostatic equilibrium equation.
+
+        Parameters:
+        ----------
+        r_bins: array
+            Array of the radius bins.
+        rho_bins: array
+            Array of the density bins.
+        total_phi_bins: array
+            Array of the total potential bins.
+
+        Returns:
+        -------
+        pressure_bins: array
+            Array of the pressure bins.
+        """
+        _delta_pressure_integrand = (
+            rho_bins * np.gradient(total_phi_bins, np.log(r_bins)) / r_bins
+        )
+        _delta_pressure_bins = cumulative_trapezoid(
+            _delta_pressure_integrand, r_bins, initial=0
+        )
+
+        return _delta_pressure_bins[-1] - _delta_pressure_bins
+
+    def _get_internal_energy_bins(self, rho_bins, pressure_bins, gamma):
+        """
+        Get the internal energy profile from the pressure profile.
+
+        Parameters:
+        ----------
+        rho_bins: array
+            Array of the density bins.
+        pressure_bins: array
+            Array of the pressure bins.
+
+        Returns:
+        -------
+        internal_energy_bins: array
+            Array of the internal energy bins.
+        """
+        return pressure_bins / (gamma - 1) / rho_bins
