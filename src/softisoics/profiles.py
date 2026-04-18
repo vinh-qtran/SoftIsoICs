@@ -6,7 +6,7 @@ from softisoics.utils import get_interp
 
 
 class BaseSingleProfile:
-    def __init__(self, r_bin_min, r_bin_max, N_bins, halo_edge=None, epsilon=0):
+    def __init__(self, r_bin_min, r_bin_max, N_bins, halo_edge=None, epsilons=[0]):  # noqa: B006
         """
         Initialize the profile.
 
@@ -20,8 +20,8 @@ class BaseSingleProfile:
             Number of bins for the profile.
         halo_edge: float, optional
             Radius of the halo edge. If None, it is set to r_bin_max.
-        epsilon: float, optional
-            Softening length. If 0, no softening is applied.
+        epsilons: list of float, optional
+            List of softening lengths. If empty, no softening is applied.
 
         Attributes:
         ----------
@@ -44,7 +44,7 @@ class BaseSingleProfile:
 
         self._N_bins = N_bins
 
-        self.epsilon = epsilon
+        self.epsilons = epsilons
 
         self.r_bins = np.logspace(
             np.log10(self._r_bin_min),
@@ -56,9 +56,14 @@ class BaseSingleProfile:
         self.mass_bins = self._get_mass_bins(self.r_bins, self.rho_bins)
         self.phi_bins = self._get_phi_bins(self.r_bins, self.mass_bins)
 
-        _conv_rho_bins = self._get_convoluted_rho_bins(self.r_bins, self.epsilon)
-        _conv_mass_bins = self._get_mass_bins(self.r_bins, _conv_rho_bins)
-        self.conv_phi_bins = self._get_phi_bins(self.r_bins, _conv_mass_bins)
+        self.conv_phi_bins = {}
+
+        for epsilon in self.epsilons:
+            _conv_rho_bins = self._get_convoluted_rho_bins(self.r_bins, epsilon)
+            _conv_mass_bins = self._get_mass_bins(self.r_bins, _conv_rho_bins)
+            self.conv_phi_bins[epsilon] = self._get_phi_bins(
+                self.r_bins, _conv_mass_bins
+            )
 
     def _get_rho_bins(self, r_bins):
         """
@@ -194,13 +199,13 @@ class BaseSingleProfile:
 
 
 class CollisionlessSingleProfile(BaseSingleProfile):
-    def __init__(self, r_bin_min, r_bin_max, N_bins, halo_edge=None, epsilon=0):
+    def __init__(self, r_bin_min, r_bin_max, N_bins, halo_edge=None, epsilons=[0]):  # noqa: B006
         super().__init__(
             r_bin_min=r_bin_min,
             r_bin_max=r_bin_max,
             N_bins=N_bins,
             halo_edge=halo_edge,
-            epsilon=epsilon,
+            epsilons=epsilons,
         )
 
         """
@@ -216,8 +221,8 @@ class CollisionlessSingleProfile(BaseSingleProfile):
             Number of bins for the profile.
         halo_edge: float, optional
             Radius of the halo edge. If None, it is set to r_bin_max.
-        epsilon: float, optional
-            Softening length. If 0, no softening is applied.
+        epsilons: list of float, optional
+            List of softening lengths. If empty, no softening is applied.
 
         Attributes:
         ----------
@@ -453,13 +458,13 @@ class CollisionlessSingleProfile(BaseSingleProfile):
 
 
 class CollisionalSingleProfile(BaseSingleProfile):
-    def __init__(self, r_bin_min, r_bin_max, N_bins, halo_edge=None, epsilon=0):
+    def __init__(self, r_bin_min, r_bin_max, N_bins, halo_edge=None, epsilons=[0]):  # noqa: B006
         super().__init__(
             r_bin_min=r_bin_min,
             r_bin_max=r_bin_max,
             N_bins=N_bins,
             halo_edge=halo_edge,
-            epsilon=epsilon,
+            epsilons=epsilons,
         )
 
         """
@@ -475,8 +480,8 @@ class CollisionalSingleProfile(BaseSingleProfile):
             Number of bins for the profile.
         halo_edge: float, optional
             Radius of the halo edge. If None, it is set to r_bin_max.
-        epsilon: float, optional
-            Softening length. If 0, no softening is applied.
+        epsilons: list of float, optional
+            List of softening lengths. If empty, no softening is applied.
 
         Attributes:
         ----------
