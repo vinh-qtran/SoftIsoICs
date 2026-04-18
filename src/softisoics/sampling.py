@@ -50,18 +50,10 @@ class SampleParticles:
 
         Attributes:
         ----------
-        part_x: array
-            Array of particle x-coordinates.
-        part_y: array
-            Array of particle y-coordinates.
-        part_z: array
-            Array of particle z-coordinates.
-        part_vx: array
-            Array of particle x-velocities.
-        part_vy: array
-            Array of particle y-velocities.
-        part_vz: array
-            Array of particle z-velocities.
+        part_coords: array
+            Array of particle coordinates.
+        part_velocs: array
+            Array of particle velocities.
         part_mass: float
             Mass of each particle.
         """
@@ -117,6 +109,17 @@ class SampleParticles:
     def _get_profiles_interp(self, r_bins, mass_bins, eps_bins, f_eps_bins):
         """
         Get the interpolated profiles of the halo.
+
+        Parameters:
+        ----------
+        r_bins: array
+            Array of the radius bins.
+        mass_bins: array
+            Array of the mass bins corresponding to the radius bins.
+        eps_bins: array
+            Array of the specific energy bins.
+        f_eps_bins: array
+            Array of the distribution function bins.
 
         Returns:
         -------

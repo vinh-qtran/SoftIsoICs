@@ -15,6 +15,36 @@ class GenerateMesh:
         r_sample_max,
         N_cell,
     ):
+        """
+        Generate the mesh for the initial conditions of spherical gas bulge.
+
+        Parameters:
+        ----------
+        r_bins: array
+            Array of the radius bins.
+        rho_bins: array
+            Array of the density bins.
+        mass_bins: array
+            Array of the mass bins.
+        internal_energy_bins: array
+            Array of the internal energy bins.
+        r_sample_max: float
+            Maximum radius to sample particles from.
+        N_cell: int
+            Number of cells to generate.
+
+        Attributes:
+        ----------
+        mesh_coords: array
+            Array of the mesh coordinates.
+        mesh_velocs: array
+            Array of the mesh velocities.
+        mesh_masses: array
+            Array of the mesh masses.
+        mesh_internal_energies: array
+            Array of the mesh internal energies.
+        """
+
         self._r_sample_max = r_sample_max
 
         self._N_cell = N_cell
@@ -49,6 +79,32 @@ class GenerateMesh:
         )
 
     def _get_profile_interp(self, r_bins, rho_bins, mass_bins, internal_energy_bins):
+        """
+        Get the interpolated profiles of the bulge.
+
+        Parameters:
+        ----------
+        r_bins: array
+            Array of the radius bins.
+        rho_bins: array
+            Array of the density bins.
+        mass_bins: array
+            Array of the mass bins.
+        internal_energy_bins: array
+            Array of the internal energy bins.
+
+        Returns:
+        -------
+        log_log_rho_interp: function
+            Interpolated function of log-log density profile.
+        log_log_mass_interp: function
+            Interpolated function of log-log mass profile.
+        log_log_inverse_mass_interp: function
+            Interpolated function of log-log inverse mass profile.
+        log_log_accum_internal_energy_interp: function
+            Interpolated function of log-log accumulated internal energy profile.
+        """
+
         log_log_rho_interp = get_interp(np.log(r_bins), np.log(rho_bins))
 
         log_log_mass_interp = get_interp(np.log(r_bins), np.log(mass_bins))
@@ -73,6 +129,17 @@ class GenerateMesh:
         )
 
     def _get_shell_boundaries(self):
+        """
+        Get the shell boundaries for the mesh generation basing on the equal-mass approach.
+
+        Returns:
+        -------
+        shell_lower_boundaries: array
+            Array of the shell lower boundaries.
+        num_cell_per_shell: array
+            Array of the number of cells per shell.
+        """
+
         def _get_r_out(r_in):
             _M_in = np.exp(self._log_log_mass_interp(np.log(r_in)))
 
@@ -118,6 +185,22 @@ class GenerateMesh:
         return shell_lower_boundaries, num_cell_per_shell
 
     def _get_mesh_generating_points(self, shell_lower_boundaries, num_cell_per_shell):
+        """
+        Get the mesh generating points using the Fibonacci lattice method.
+
+        Parameters:
+        ----------
+        shell_lower_boundaries: array
+            Array of the shell lower boundaries.
+        num_cell_per_shell: array
+            Array of the number of cells per shell.
+
+        Returns:
+        -------
+        mesh_coords: array
+            Array of the mesh coordinates.
+        """
+
         _r_mesh = [0]
         for i in range(shell_lower_boundaries.shape[0]):
             _r_mesh.append(
@@ -159,9 +242,34 @@ class GenerateMesh:
         return np.vstack([_x_mesh, _y_mesh, _z_mesh]).T
 
     def _get_mesh_velocities(self):
+        """
+        Get the mesh velocities, assuming no rotations.
+
+        Returns:
+        -------
+        mesh_velocs: array
+            Array of the mesh velocities.
+        """
+
         return np.zeros((self._N_cell, 3), dtype=np.float64)
 
     def _get_mesh_masses(self, shell_lower_boundaries, num_cell_per_shell):
+        """
+        Get the mesh masses basing on the mass of the cells in each shell.
+
+        Parameters:
+        ----------
+        shell_lower_boundaries: array
+            Array of the shell lower boundaries.
+        num_cell_per_shell: array
+            Array of the number of cells per shell.
+
+        Returns:
+        -------
+        mesh_masses: array
+            Array of the mesh masses.
+        """
+
         _shell_cell_masses = (
             np.diff(np.exp(self._log_log_mass_interp(np.log(shell_lower_boundaries))))
             / num_cell_per_shell[:-1]
@@ -184,6 +292,24 @@ class GenerateMesh:
     def _get_mesh_internal_energies(
         self, shell_lower_boundaries, num_cell_per_shell, mesh_masses
     ):
+        """
+        Get the mesh internal energies basing on the average internal energy of the cells in each shell.
+
+        Parameters:
+        ----------
+        shell_lower_boundaries: array
+            Array of the shell lower boundaries.
+        num_cell_per_shell: array
+            Array of the number of cells per shell.
+        mesh_masses: array
+            Array of the mesh masses.
+
+        Returns:
+        -------
+        mesh_internal_energies: array
+            Array of the mesh internal energies.
+        """
+
         _shell_cell_internal_energies = np.diff(
             np.exp(
                 self._log_log_accum_internal_energy_interp(
