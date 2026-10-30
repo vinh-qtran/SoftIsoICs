@@ -5,7 +5,7 @@ from tqdm import tqdm
 from softisoics.utils import get_interp
 
 
-class SampleParticles:
+class SampleIsotropicParticles:
     def __init__(
         self,
         r_bins,

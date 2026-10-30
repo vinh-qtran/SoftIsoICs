@@ -73,7 +73,7 @@ class Halo:
     Halo class to check the profiles of the halo sampled particles.
     """
 
-    def input_from_particles(self, part_coords, part_velocs, part_mass):
+    def input_from_particles(self, part_coords, part_velocs, part_masses):
         """
         Read the particle data from the input arrays.
 
@@ -99,7 +99,7 @@ class Halo:
         self.part_coords = part_coords
         self.part_velocs = part_velocs
 
-        self.part_mass = part_mass
+        self.part_masses = part_masses
 
         self._center_halo()
 
@@ -127,7 +127,7 @@ class Halo:
         self.part_coords = data["PartType1/Coordinates"][:]
         self.part_velocs = data["PartType1/Velocities"][:]
 
-        self.part_mass = data["PartType1/Masses"][0]
+        self.part_masses = data["PartType1/Masses"][:]
 
         self._center_halo()
 
@@ -147,7 +147,9 @@ class Halo:
             Array of particle radial velocities from the halo center.
         """
 
-        self.halo_center = np.mean(self.part_coords, axis=0)
+        self.halo_center = np.sum(
+            self.part_masses.reshape(-1, 1) * self.part_coords, axis=0
+        ) / np.sum(self.part_masses)
 
         self.part_coords -= self.halo_center
         self.part_radii = np.sqrt(np.sum(self.part_coords**2, axis=1))
@@ -170,17 +172,26 @@ class Halo:
             Array of particle angular momenta in the z-direction.
         """
 
-        Lx = self.part_mass * np.sum(
-            self.part_coords[:, 1] * self.part_velocs[:, 2]
-            - self.part_coords[:, 2] * self.part_velocs[:, 1]
+        Lx = np.sum(
+            self.part_masses
+            * (
+                self.part_coords[:, 1] * self.part_velocs[:, 2]
+                - self.part_coords[:, 2] * self.part_velocs[:, 1]
+            )
         )
-        Ly = self.part_mass * np.sum(
-            self.part_coords[:, 2] * self.part_velocs[:, 0]
-            - self.part_coords[:, 0] * self.part_velocs[:, 2]
+        Ly = np.sum(
+            self.part_masses
+            * (
+                self.part_coords[:, 2] * self.part_velocs[:, 0]
+                - self.part_coords[:, 0] * self.part_velocs[:, 2]
+            )
         )
-        Lz = self.part_mass * np.sum(
-            self.part_coords[:, 0] * self.part_velocs[:, 1]
-            - self.part_coords[:, 1] * self.part_velocs[:, 0]
+        Lz = np.sum(
+            self.part_masses
+            * (
+                self.part_coords[:, 0] * self.part_velocs[:, 1]
+                - self.part_coords[:, 1] * self.part_velocs[:, 0]
+            )
         )
 
         return Lx, Ly, Lz
@@ -217,15 +228,18 @@ class Halo:
 
         _bin_indices = np.digitize(self.part_radii, _r_bin_edges) - 1
 
-        _count_bins = np.array(
+        _shell_mass_bins = np.array(
+            [np.sum(self.part_masses[_bin_indices == i]) for i in range(len(r_bins))]
+        )
+        _shell_mass_sqr_bins = np.array(
             [
-                np.sum((self.part_radii[_bin_indices == i]).shape[0])
+                np.sum(self.part_masses[_bin_indices == i] ** 2)
                 for i in range(len(r_bins))
             ]
         )
 
-        rho_bins = _count_bins * self.part_mass / _V_bins
-        rho_bins_err = np.sqrt(_count_bins) * self.part_mass / _V_bins
+        rho_bins = _shell_mass_bins / _V_bins
+        rho_bins_err = np.sqrt(_shell_mass_sqr_bins) / _V_bins
 
         sigma_r_bins = np.array(
             [
@@ -233,6 +247,8 @@ class Halo:
                 for i in range(len(r_bins))
             ]
         )
-        sigma_r_bins_err = sigma_r_bins / np.sqrt(2 * _count_bins)
+        sigma_r_bins_err = sigma_r_bins / np.sqrt(
+            2 * _shell_mass_bins**2 / _shell_mass_sqr_bins
+        )
 
         return r_bins, rho_bins, rho_bins_err, sigma_r_bins, sigma_r_bins_err

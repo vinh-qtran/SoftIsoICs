@@ -39,6 +39,7 @@ repos:
     rev: "v3.8.2"
     hooks:
       - id: prettier
+        language_version: lts
         types_or: [yaml, markdown, html, css, scss, javascript, json]
         args: [--prose-wrap=always]
 
