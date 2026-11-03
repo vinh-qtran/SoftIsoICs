@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+from scipy.integrate import cumulative_trapezoid
 from scipy.interpolate import CubicSpline
 
 
@@ -29,6 +30,17 @@ def get_interp(x_bins, y_bins):
     finite_mask = np.logical_and(np.isfinite(x_bins), np.isfinite(y_bins))
 
     return CubicSpline(x_bins[finite_mask], y_bins[finite_mask])
+
+
+def get_cumulative_from_outside(integrand, r_bins):
+    """
+    int_r^{r_max} integrand dr' at every r, integrated inward from r_max.
+
+    Equivalent to total - cumulative_trapezoid(...), but without the subtraction of two
+    nearly equal numbers, which loses all precision (and can go negative) wherever the
+    result is below ~1e-16 of the total, i.e. in the far outskirts of the profile.
+    """
+    return -cumulative_trapezoid(integrand[::-1], r_bins[::-1], initial=0)[::-1]
 
 
 def get_N_part_from_N_200(N_200, r200, r_sample_max, r_bins, mass_bins):

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.integrate import cumulative_trapezoid, quad
 from tqdm import tqdm
 
-from softisoics.utils import get_interp
+from softisoics.utils import get_cumulative_from_outside, get_interp
 
 
 class BaseSingleProfile:
@@ -323,13 +323,10 @@ class CollisionlessSingleProfile(BaseSingleProfile):
             * np.gradient(total_phi_bins, np.log(r_bins))
             / r_bins
         )
-        _delta_fbeta_rho_sigma_r_sqr_bins = cumulative_trapezoid(
-            _delta_fbeta_rho_sigma_r_sqr_integrand, r_bins, initial=0
+        _fbeta_rho_sigma_r_sqr_bins = get_cumulative_from_outside(
+            _delta_fbeta_rho_sigma_r_sqr_integrand, r_bins
         )
-        return np.sqrt(
-            (_delta_fbeta_rho_sigma_r_sqr_bins[-1] - _delta_fbeta_rho_sigma_r_sqr_bins)
-            / (_fbeta_bins * rho_bins)
-        )
+        return np.sqrt(_fbeta_rho_sigma_r_sqr_bins / (_fbeta_bins * rho_bins))
 
     def get_L_err_scaler(self, r_bins, rho_bins, sigma_r_bins):
         """
@@ -518,6 +515,10 @@ class CollisionalSingleProfile(BaseSingleProfile):
             Array of the pressure bins.
         internal_energy_bins: array
             Array of the internal energy bins.
+        entropy_bins: array
+            Array of the entropy bins.
+        entropy_slope_bins: array
+            Array of the entropy slope bins.
         """
         self.total_phi_bins = total_phi_bins
         self.gamma = gamma
@@ -528,6 +529,13 @@ class CollisionalSingleProfile(BaseSingleProfile):
 
         self.internal_energy_bins = self._get_internal_energy_bins(
             self.rho_bins, self.pressure_bins, gamma
+        )
+
+        self.entropy_bins = self._get_entropy_bins(
+            self.rho_bins, self.pressure_bins, gamma
+        )
+        self.entropy_slope_bins = self._get_entropy_slope_bins(
+            self.r_bins, self.entropy_bins
         )
 
     def _get_pressure_bins(self, r_bins, rho_bins, total_phi_bins):
@@ -551,11 +559,8 @@ class CollisionalSingleProfile(BaseSingleProfile):
         _delta_pressure_integrand = (
             rho_bins * np.gradient(total_phi_bins, np.log(r_bins)) / r_bins
         )
-        _delta_pressure_bins = cumulative_trapezoid(
-            _delta_pressure_integrand, r_bins, initial=0
-        )
-
-        return _delta_pressure_bins[-1] - _delta_pressure_bins
+        # P(r) = int_r^{r_max} rho dPhi/dr' dr', with P(r_max) = 0
+        return get_cumulative_from_outside(_delta_pressure_integrand, r_bins)
 
     def _get_internal_energy_bins(self, rho_bins, pressure_bins, gamma):
         """
@@ -574,3 +579,72 @@ class CollisionalSingleProfile(BaseSingleProfile):
             Array of the internal energy bins.
         """
         return pressure_bins / (gamma - 1) / rho_bins
+
+    def _get_entropy_bins(self, rho_bins, pressure_bins, gamma):
+        """
+        Get the entropy profile, K = P / rho^gamma (the "entropy" used for astrophysical
+        gas; for an ideal gas the thermodynamic entropy per unit mass is
+        s = c_v ln K + const).
+
+        Parameters:
+        ----------
+        rho_bins: array
+            Array of the density bins.
+        pressure_bins: array
+            Array of the pressure bins.
+        gamma: float
+            Adiabatic index for the gas.
+
+        Returns:
+        -------
+        entropy_bins: array
+            Array of the entropy bins.
+        """
+        return pressure_bins / rho_bins**gamma
+
+    def _get_entropy_slope_bins(self, r_bins, entropy_bins):
+        """
+        Get the logarithmic entropy slope, d ln K / d ln r. NaN where K <= 0
+        (e.g. the last bin, where P(r_max) = 0 by construction).
+
+        Parameters:
+        ----------
+        r_bins: array
+            Array of the radius bins.
+        entropy_bins: array
+            Array of the entropy bins.
+
+        Returns:
+        -------
+        entropy_slope_bins: array
+            Array of the logarithmic entropy slope bins.
+        """
+        with np.errstate(divide="ignore", invalid="ignore"):
+            _log_entropy_bins = np.where(entropy_bins > 0, np.log(entropy_bins), np.nan)
+            return np.gradient(_log_entropy_bins, np.log(r_bins))
+
+    def is_convectively_stable(self, r_max=None, tolerance=1e-3):
+        """
+        Check the Schwarzschild criterion for an adiabatic, non-rotating gas in hydrostatic
+        equilibrium: the profile is convectively stable where entropy does not decrease
+        outward, d ln K / d ln r >= 0. A hydrostatic solution exists for any density
+        profile, but it only stays put if this holds.
+
+        Parameters:
+        ----------
+        r_max: float, optional
+            Only check r < r_max (e.g. r_sample_max). If None, check the whole profile.
+        tolerance: float, optional
+            Slopes down to -tolerance are accepted as zero (isentropic cores have
+            d ln K / d ln r -> 0, which numerical noise can push slightly negative).
+
+        Returns:
+        -------
+        is_stable: bool
+            Whether d ln K / d ln r >= -tolerance everywhere it is finite in the range.
+        """
+        _mask = np.isfinite(self.entropy_slope_bins)
+        if r_max is not None:
+            _mask &= self.r_bins < r_max
+
+        return bool(np.all(self.entropy_slope_bins[_mask] >= -tolerance))
